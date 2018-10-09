@@ -1,0 +1,3 @@
+[submodule "zlstring"]
+	path = zlstring
+	url = https://github.com/elfincafe/zlstring.git
