@@ -5,6 +5,10 @@
 #include <stdbool.h>
 #include "zlstring.h"
 
+struct _zlXmlAttr;
+struct _zlXmlAttrContainer;
+struct _zlXmlElem;
+struct _zlXmlElemContainer;
 
 typedef struct _zlXmlAttr
 {
@@ -12,21 +16,35 @@ typedef struct _zlXmlAttr
 	zlString *value;
 } zlXmlAttr;
 
+typedef struct _zlXmlAttrContainer
+{
+	size_t size;
+	size_t count;
+	struct _zlXmlAttr **attrs;
+} zlXmlAttrContainer;
+
 typedef struct _zlXmlElem
 {
 	zlString *name;
-	size_t attr_count;
-	zlXmlAttr **attrs;
-	size_t child_count;
-	struct _zlXmlElem **elems;
+	size_t depth;
+	struct _zlXmlAttrContainer *attrs;
+	struct _zlXmlElemContainer *children;
 	struct _zlXmlElem *parent;
+	zlString *data;
 } zlXmlElem;
+
+typedef struct _zlXmlElemContainer
+{
+	size_t size;
+	size_t count;
+	struct _zlXmlElem **elems;
+} zlXmlElemContainer;
 
 typedef struct _zlXml
 {
 	bool standalone;
-	zlString *encoding;
-	zlString *version;
+	char encoding[16];
+	float version;
 	zlXmlElem *root;
 } zlXml;
 
