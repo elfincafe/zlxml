@@ -5,40 +5,25 @@
 #include <stdbool.h>
 #include "zlstring.h"
 
-struct _zlXmlAttr;
-struct _zlXmlAttrContainer;
-struct _zlXmlElem;
-struct _zlXmlElemContainer;
-
 typedef struct _zlXmlAttr
 {
 	zlString *key;
 	zlString *value;
 } zlXmlAttr;
 
-typedef struct _zlXmlAttrContainer
-{
-	size_t size;
-	size_t count;
-	struct _zlXmlAttr **attrs;
-} zlXmlAttrContainer;
-
 typedef struct _zlXmlElem
 {
 	zlString *name;
 	size_t depth;
-	struct _zlXmlAttrContainer *attrs;
-	struct _zlXmlElemContainer *children;
+	size_t attr_size;
+	size_t attr_count;
+	struct _zlXmlAttr **attrs;
+	size_t child_size;
+	size_t child_count;
+	struct _zlXmlElem **children;
 	struct _zlXmlElem *parent;
 	zlString *data;
 } zlXmlElem;
-
-typedef struct _zlXmlElemContainer
-{
-	size_t size;
-	size_t count;
-	struct _zlXmlElem **elems;
-} zlXmlElemContainer;
 
 typedef struct _zlXml
 {

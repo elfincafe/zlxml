@@ -14,28 +14,53 @@ static size_t depth;
 
 static bool zlxml_add_attr(zlXmlElem *elem, zlXmlAttr *attr)
 {
-	// Realloc
-	zlXmlAttrContainer *container = elem->attrs;
-	size_t size = elem->attrs->size;
-	size_t count = elem->attrs->count;
+	size_t msize = 3;
+	size_t size = elem->attr_size;
+	size_t count = elem->attr_count;
+
+	// Reallocation
 	if (size<=count) {
 		zlXmlAttr **tmp = NULL;
-		tmp = (zlXmlAttr**)realloc(container->attrs, sizeof(zlXmlAttr)*(elem->attrs->size+5));
-		if (!tmp) {
+		tmp = (zlXmlAttr**)realloc(elem->attrs, sizeof(zlXmlAttr*)*(size+msize));
+		if (tmp==NULL) {
 			return false;
 		}
-		container->attrs = tmp;
-		container->size += 5;
+		elem->attrs = tmp;
+		elem->attr_size += msize;
 	}
 
-	container->attrs[count] = attr;
-	container->count++;
+	elem->attrs[count] = attr;
+	elem->attr_count++;
 
 	return true;
 }
 
-static bool zlxml_add_child (zlXmlElem *elem, zlXmlElem *child)
+static bool zlxml_add_child (zlXmlElem *child)
 {
+	zlXmlElem *parent = child->parent;
+	if (parent==NULL) {
+		return false;
+	}
+	size_t msize = 5;
+	size_t count = parent->child_count;
+	size_t size = parent->child_size;
+
+//printf("%p -> %zu(%zu)\n", parent, parent->child_count, parent->child_size);
+
+	// Reallocation
+	if (size<count+1) {
+		zlXmlElem **tmp = NULL;
+		tmp = (zlXmlElem**)realloc(parent->children, sizeof(zlXmlElem*)*(size+msize));
+		if (tmp==NULL){ 
+			return false;
+		}
+		parent->children = tmp;
+		parent->child_size += msize;
+	}
+	parent->children[count] = child;
+	parent->child_count++;
+//printf("%p -> %zu(%zu)\n\n", parent, parent->child_count, parent->child_size);
+
 	return true;
 }
 
@@ -75,6 +100,7 @@ static void XMLCALL zlxml_handle_startelem(void *user_data, const XML_Char *name
 		prev = prev->parent;
 	}
 	elem->parent = parent;
+	zlxml_add_child(elem);
 
 	// Attributes
 	size_t i = 0;
@@ -90,21 +116,20 @@ static void XMLCALL zlxml_handle_startelem(void *user_data, const XML_Char *name
 	// Post Processing
 	previous = current;
 
-zlxml_dump_elem(elem);
+//zlxml_dump_elem(elem);
 }
 
 static void XMLCALL zlxml_handle_endelem(void *user_data, const char *name)
 {
-//	if (previous && previous->depth==current->depth-1) {
-//		current->parent = parent = previous;
-//	}
 	--depth;
 }
 
 static void XMLCALL zlxml_handle_data(void *user_data, const XML_Char *s, int len)
 {
-	char buf[len+1];
-	strncpy(buf, s, len);
+	char str[len+1];
+	strncpy(str, s, len);
+	str[len] = '\0';
+	zlstr_copy(current->data, s, len);
 }
 
 static void XMLCALL zlxml_handle_startcdata(void *user_data)
@@ -199,21 +224,14 @@ zlXmlElem *zlxml_new_elem(zlString *name)
 
 	elem->name = name;
 	elem->depth = depth;
+	elem->attr_size = 0;
+	elem->attr_count = 0;
 	elem->attrs = NULL;
+	elem->child_size = 0;
+	elem->child_count = 0;
 	elem->children = NULL;
 	elem->parent = NULL;
 	elem->data = zlstr_new("", 0);
-
-	// Attributes Container
-	elem->attrs = (zlXmlAttrContainer*)calloc(1, sizeof(zlXmlAttrContainer));
-	if (!elem->attrs) {
-		return NULL;
-	}
-	// Elements Container
-	elem->children = (zlXmlElemContainer*)calloc(1, sizeof(zlXmlElemContainer));
-	if (!elem->children) {
-		return NULL;
-	}
 
 	return elem;
 }
@@ -270,15 +288,36 @@ void zlxml_dump_elem(zlXmlElem *elem)
 	}
 
 	printf(
-		"zlXmlElem (%p) ----------\n  name:     %s\n  depth:    %zu\n  attrs:    %p\n  children: %p\n  parent:   %p\n%s\n",
+		"zlXmlElem (%p) ----------\n  name:        %s\n  depth:       %zu\n  attr_size:   %zu\n  attr_count:  %zu\n  attrs:       %p\n  child_size:  %zu\n  child_count: %zu\n  children:    %p\n  parent:      %p\n  data:     %s\n",
 		elem,
 		elem->name->content,
 		elem->depth,
+		elem->attr_size,
+		elem->attr_count,
 		elem->attrs,
+		elem->child_size,
+		elem->child_count,
 		elem->children,
 		elem->parent,
 		elem->data->content
 	);
+	size_t i;
+	for (i=0; i<elem->attr_count; i++) {
+		printf(
+			"  zlXmlAttr (%p) ----------\n    key:       %s\n    value:     %s\n",
+			elem->attrs[i],
+			elem->attrs[i]->key->content,
+			elem->attrs[i]->value->content
+		);
+	}
+	for (i=0; i<elem->child_count; i++) {
+		printf(
+			"  zlXmlElem (%p) ----------\n    name:      %s\n",
+			elem->children[i],
+			elem->children[i]->name->content
+		);
+	}
+	printf("\n");
 }
 
 void zlxml_dump_attr(zlXmlAttr *attr)
