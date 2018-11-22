@@ -45,8 +45,6 @@ static bool zlxml_add_child (zlXmlElem *child)
 	size_t count = parent->child_count;
 	size_t size = parent->child_size;
 
-//printf("%p -> %zu(%zu)\n", parent, parent->child_count, parent->child_size);
-
 	// Reallocation
 	if (size<count+1) {
 		zlXmlElem **tmp = NULL;
@@ -59,7 +57,6 @@ static bool zlxml_add_child (zlXmlElem *child)
 	}
 	parent->children[count] = child;
 	parent->child_count++;
-//printf("%p -> %zu(%zu)\n\n", parent, parent->child_count, parent->child_size);
 
 	return true;
 }
@@ -82,7 +79,7 @@ static void XMLCALL zlxml_handle_startelem(void *user_data, const XML_Char *name
 {
 	++depth;
 
-	zlXmlElem *elem = zlxml_new_elem(zlstr_new(name, strlen(name)));
+	zlXmlElem *elem = zlxml_new_elem((char*)name, strlen(name));
 	elem->depth = depth;
 	if (!xmldoc->root) {
 		xmldoc->root = elem;
@@ -105,18 +102,13 @@ static void XMLCALL zlxml_handle_startelem(void *user_data, const XML_Char *name
 	// Attributes
 	size_t i = 0;
 	while (attrs[i]) {
-		zlXmlAttr *attr = zlxml_new_attr(
-			zlstr_new(attrs[i], strlen(attrs[i])),
-			zlstr_new(attrs[i+1], strlen(attrs[i+1]))
-		);
+		zlXmlAttr *attr = zlxml_new_attr((char*)attrs[i], strlen(attrs[i]), (char*)attrs[i+1], strlen(attrs[i+1]));
 		zlxml_add_attr(elem, attr);
 		i += 2;
 	}
 
 	// Post Processing
 	previous = current;
-
-//zlxml_dump_elem(elem);
 }
 
 static void XMLCALL zlxml_handle_endelem(void *user_data, const char *name)
@@ -126,10 +118,13 @@ static void XMLCALL zlxml_handle_endelem(void *user_data, const char *name)
 
 static void XMLCALL zlxml_handle_data(void *user_data, const XML_Char *s, int len)
 {
-	char str[len+1];
-	strncpy(str, s, len);
-	str[len] = '\0';
-	zlstr_copy(current->data, s, len);
+	current->data = (char*)calloc(1, len+1);
+	if (current->data==NULL) {
+		return;
+	}
+	strncpy(current->data, s, len);
+	current->data[len] = '\0';
+	current->d_len = len;
 }
 
 static void XMLCALL zlxml_handle_startcdata(void *user_data)
@@ -150,8 +145,7 @@ static void XMLCALL zlxml_handle_unknown_encoding (void *encodingHandlerData, co
 
 zlXml *zlxml_new()
 {
-	zlXml *xml;
-	xml = (zlXml*)calloc(1, sizeof(zlXml));
+	zlXml *xml = (zlXml*)calloc(1, sizeof(zlXml));
 	if (!xml) {
 		return NULL;
 	}
@@ -159,29 +153,40 @@ zlXml *zlxml_new()
 	strncpy(xml->encoding, "UTF-8", 5);
 	xml->version = 1.0;
 	xml->root = NULL;
+
 	return xml;
 }
 
-zlXml *zlxml_load(zlString *path)
+zlXml *zlxml_load(char *path)
 {
 	struct stat st;
-	if (stat(path->content, &st)!=0) {
+	if (stat(path, &st)!=0) {
 		return NULL;
 	}
 
 	FILE *fp;
-	if ((fp=fopen(path->content, "rb"))==NULL) {
+	if ((fp=fopen(path, "rb"))==NULL) {
 		return NULL;
 	}
 
-	char buf[st.st_size+1];
+	char *buf = NULL;
+	buf = (char*)calloc(1, st.st_size+1);
+	if (buf==NULL) {
+		return NULL;
+	}
 	fread(buf, 1, st.st_size, fp);
 	buf[st.st_size] = '\0';
 	fclose(fp);
-	return zlxml_parse(zlstr_new(buf, st.st_size));
+
+	zlXml *xml = zlxml_parse(buf, st.st_size);
+	if (buf!=NULL) {
+		free(buf);
+		buf = NULL;
+	}
+	return xml;
 }
 
-zlXml *zlxml_parse(zlString *data)
+zlXml *zlxml_parse(char *data, size_t len)
 {
 	depth = 0;
 	current = NULL;
@@ -199,7 +204,7 @@ zlXml *zlxml_parse(zlString *data)
 	XML_SetCharacterDataHandler(p, zlxml_handle_data);
 //	XML_SetUnknownEncodingHandler(p, zlxml_handle_unknown_encoding, NULL);
 
-	enum XML_Status status = XML_Parse(p, data->content, zlstr_length(data), 1);
+	enum XML_Status status = XML_Parse(p, data, len, 1);
 	if (status==XML_STATUS_ERROR) {
 		printf("Error <<%d>>\n", status);
 	} else if (status==XML_STATUS_OK) {
@@ -207,22 +212,25 @@ zlXml *zlxml_parse(zlString *data)
 	} else {
 		printf("Extra<<%d>>\n", status);
 	}
-	zlstr_free(data);
-
 
 	XML_ParserFree(p);
-
+	
 	return xmldoc;
 }
 
-zlXmlElem *zlxml_new_elem(zlString *name)
+zlXmlElem *zlxml_new_elem (char *name, size_t len)
 {
 	zlXmlElem *elem = (zlXmlElem*)calloc(1, sizeof(zlXmlElem));
 	if (!elem) {
 		return NULL;
 	}
 
-	elem->name = name;
+	elem->name = (char*)calloc(1, len+1);
+	if (elem->name==NULL) {
+		return NULL;
+	}
+	strncpy(elem->name, name, len);
+	elem->name[len] = '\0';
 	elem->depth = depth;
 	elem->attr_size = 0;
 	elem->attr_count = 0;
@@ -231,19 +239,31 @@ zlXmlElem *zlxml_new_elem(zlString *name)
 	elem->child_count = 0;
 	elem->children = NULL;
 	elem->parent = NULL;
-	elem->data = zlstr_new("", 0);
+	elem->d_len = 0;
+	elem->data = NULL;
 
 	return elem;
 }
 
-zlXmlAttr *zlxml_new_attr(zlString *key, zlString *value)
+zlXmlAttr *zlxml_new_attr (char *key, size_t len_k, char *value, size_t len_v)
 {
 	zlXmlAttr *attr = (zlXmlAttr*)calloc(1, sizeof(zlXmlAttr));
 	if (!attr) {
 		return NULL;
 	}
-	attr->key = key;
-	attr->value = value;
+	attr->key = (char*)calloc(1, len_k+1);
+	if (attr->key==NULL) {
+		return NULL;
+	}
+	strncpy(attr->key, key, len_k);
+	attr->key[len_k] = '\0';
+	attr->value = (char*)calloc(1, len_v+1);
+	if (attr->value==NULL) {
+		return NULL;
+	}
+	strncpy(attr->value, value, len_v);
+	attr->value[len_v] = '\0';
+
 	return attr;
 }
 
@@ -251,6 +271,7 @@ void zlxml_free(zlXml *xml)
 {
 	if (xml->root) {
 		zlxml_free_elem(xml->root);
+		xml->root = NULL;
 	}
 	if (xml) {
 		free(xml);
@@ -281,6 +302,7 @@ void zlxml_dump(zlXml *xml)
 		xml->root
 	);
 }
+
 void zlxml_dump_elem(zlXmlElem *elem)
 {
 	if (!elem) {
@@ -288,9 +310,9 @@ void zlxml_dump_elem(zlXmlElem *elem)
 	}
 
 	printf(
-		"zlXmlElem (%p) ----------\n  name:        %s\n  depth:       %zu\n  attr_size:   %zu\n  attr_count:  %zu\n  attrs:       %p\n  child_size:  %zu\n  child_count: %zu\n  children:    %p\n  parent:      %p\n  data:     %s\n",
+		"zlXmlElem (%p) ----------\n  name:        %s\n  depth:       %zu\n  attr_size:   %zu\n  attr_count:  %zu\n  attrs:       %p\n  child_size:  %zu\n  child_count: %zu\n  children:    %p\n  parent:      %p\n  d_len:    %zu\n  data:     %s\n",
 		elem,
-		elem->name->content,
+		elem->name,
 		elem->depth,
 		elem->attr_size,
 		elem->attr_count,
@@ -299,22 +321,23 @@ void zlxml_dump_elem(zlXmlElem *elem)
 		elem->child_count,
 		elem->children,
 		elem->parent,
-		elem->data->content
+		elem->d_len,
+		elem->data
 	);
 	size_t i;
 	for (i=0; i<elem->attr_count; i++) {
 		printf(
 			"  zlXmlAttr (%p) ----------\n    key:       %s\n    value:     %s\n",
 			elem->attrs[i],
-			elem->attrs[i]->key->content,
-			elem->attrs[i]->value->content
+			elem->attrs[i]->key,
+			elem->attrs[i]->value
 		);
 	}
 	for (i=0; i<elem->child_count; i++) {
 		printf(
 			"  zlXmlElem (%p) ----------\n    name:      %s\n",
 			elem->children[i],
-			elem->children[i]->name->content
+			elem->children[i]->name
 		);
 	}
 	printf("\n");
@@ -329,8 +352,8 @@ void zlxml_dump_attr(zlXmlAttr *attr)
 	printf(
 		"zlXmlAttr (%p) ----------\n  key:     %s\n  value:   %s\n\n",
 		attr,
-		attr->key->content,
-		attr->value->content
+		attr->key,
+		attr->value
 	);
 }
 

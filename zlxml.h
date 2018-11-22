@@ -7,13 +7,13 @@
 
 typedef struct _zlXmlAttr
 {
-	zlString *key;
-	zlString *value;
+	char *key;
+	char *value;
 } zlXmlAttr;
 
 typedef struct _zlXmlElem
 {
-	zlString *name;
+	char *name;
 	size_t depth;
 	size_t attr_size;
 	size_t attr_count;
@@ -22,7 +22,8 @@ typedef struct _zlXmlElem
 	size_t child_count;
 	struct _zlXmlElem **children;
 	struct _zlXmlElem *parent;
-	zlString *data;
+	size_t d_len;
+	char *data;
 } zlXmlElem;
 
 typedef struct _zlXml
@@ -35,10 +36,10 @@ typedef struct _zlXml
 
 
 zlXml *zlxml_new();
-zlXml *zlxml_load(zlString*);
-zlXml *zlxml_parse(zlString*);
-zlXmlElem *zlxml_new_elem();
-zlXmlAttr *zlxml_new_attr(zlString*, zlString*);
+zlXml *zlxml_load(char*);
+zlXml *zlxml_parse(char*, size_t);
+zlXmlElem *zlxml_new_elem(char*, size_t);
+zlXmlAttr *zlxml_new_attr(char*, size_t, char*, size_t);
 
 void zlxml_free(zlXml*);
 void zlxml_free_elem(zlXmlElem*);
