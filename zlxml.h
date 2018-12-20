@@ -3,6 +3,7 @@
 
 #include <stdlib.h>
 #include <stdbool.h>
+#include <expat.h>
 #include "zlstring.h"
 
 typedef struct _zlXmlAttr
@@ -22,7 +23,7 @@ typedef struct _zlXmlElem
 	size_t child_count;
 	struct _zlXmlElem **children;
 	struct _zlXmlElem *parent;
-	size_t d_len;
+	size_t dat_len;
 	char *data;
 } zlXmlElem;
 
@@ -34,6 +35,14 @@ typedef struct _zlXml
 	zlXmlElem *root;
 } zlXml;
 
+typedef struct _zlXmlWorker
+{
+	zlXml *doc;
+	zlXmlElem *cur;
+	zlXmlElem *prev;
+	zlXmlElem *parent;
+	size_t depth;
+} zlXmlWorker;
 
 zlXml *zlxml_new();
 zlXml *zlxml_load(char*);
